@@ -1,0 +1,24 @@
+version: "3.9" # Version of docker-compose
+
+services:
+  pulse:
+    build: 
+      context: .
+      dockerfile: Dockerfile.api
+      ssh: [default]
+    ports:
+      - "8080:8080"        # Expose port 8080 for the web service
+    environment:
+      - VICTORIA_METRICS_URL=http://victoriametrics:8428 # Set the environment variable for VictoriaMetrics
+    networks:
+      - pulse-network
+
+  victoriametrics:
+    image: victoriametrics/victoria-metrics
+    ports:
+      - "8428:8428"        # Expose port 8428 for VictoriaMetrics
+    networks:
+      - pulse-network
+
+networks:
+  pulse-network:
