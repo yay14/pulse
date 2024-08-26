@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+option go_package = "github.com/yay14/pulse/metrics";
+
+// The WriteRequest is a request to write time series data.
+message WriteRequest {
+    repeated Timeseries timeseries = 1; // The timeseries to be written
+}
+
+// The WriteResponse contains the status of the write operation.
+message WriteResponse {
+    string status = 1; // Status message indicating success or failure
+}
+
+// A single timeseries
+message Timeseries {
+    map<string, string> labels = 1; // Labels associated with this timeseries
+    repeated Sample samples = 2; // Samples for this timeseries
+}
+
+// A single sample
+message Sample {
+    double value = 1; // Value of the sample
+    int64 timestamp = 2; // Timestamp of the sample
+}
+
+// The ReadRequest is a request to read time series data.
+message ReadRequest {
+    string query = 1; // Query string to retrieve data
+}
+
+// The ReadResponse is the response for a ReadRequest.
+message ReadResponse {
+    repeated TimeseriesData timeseries = 1; // Retrieved time series data
+}
+
+// A single timeseries data response
+message TimeseriesData {
+    map<string, string> labels = 1; // Labels associated with this timeseries
+    repeated Sample samples = 2; // Samples for this timeseries
+}
+
+// Define the Metric service
+service MetricsService {
+    // Write metrics to VictoriaMetrics
+    rpc WriteMetrics(WriteRequest) returns (WriteResponse);
+
+    // Query metrics from VictoriaMetrics
+    rpc QueryMetrics(ReadRequest) returns (ReadResponse);
+}
