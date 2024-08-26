@@ -11,16 +11,16 @@ import (
 
 	"net/http"
 
-	pb "github.com/yay14/pulse/metrics" // Import your generated protobuf package
+	metrics "github.com/yay14/pulse/metrics"
 	"google.golang.org/grpc"
 )
 
 type server struct {
-	pb.UnimplementedMetricsServiceServer
+	metrics.UnimplementedMetricsServiceServer
 }
 
 // WriteMetrics writes metrics to VictoriaMetrics
-func (s *server) WriteMetrics(ctx context.Context, req *pb.WriteRequest) (*pb.WriteResponse, error) {
+func (s *server) WriteMetrics(ctx context.Context, req *metrics.WriteRequest) (*metrics.WriteResponse, error) {
 	vmURL := os.Getenv("VICTORIA_METRICS_URL")
 
 	// Prepare data for VictoriaMetrics
@@ -41,31 +41,31 @@ func (s *server) WriteMetrics(ctx context.Context, req *pb.WriteRequest) (*pb.Wr
 
 	jsonBody, err := json.Marshal(jsonData)
 	if err != nil {
-		return &pb.WriteResponse{Status: "Error marshalling data"}, err
+		return &metrics.WriteResponse{Status: "Error marshalling data"}, err
 	}
 
 	// Send data to VictoriaMetrics
 	resp, err := http.Post(vmURL+"/api/v1/import", "application/json", bytes.NewReader(jsonBody))
 	if err != nil || resp.StatusCode != http.StatusOK {
-		return &pb.WriteResponse{Status: "Failed to send data to VictoriaMetrics"}, err
+		return &metrics.WriteResponse{Status: "Failed to send data to VictoriaMetrics"}, err
 	}
 
-	return &pb.WriteResponse{Status: "Data sent to VictoriaMetrics successfully"}, nil
+	return &metrics.WriteResponse{Status: "Data sent to VictoriaMetrics successfully"}, nil
 }
 
 // QueryMetrics queries metrics from VictoriaMetrics
-func (s *server) QueryMetrics(ctx context.Context, req *pb.ReadRequest) (*pb.ReadResponse, error) {
+func (s *server) QueryMetrics(ctx context.Context, req *metrics.ReadRequest) (*metrics.ReadResponse, error) {
 	vmURL := os.Getenv("VICTORIA_METRICS_URL")
 
 	resp, err := http.Get(fmt.Sprintf("%s/api/v1/query?query=%s", vmURL, req.Query))
 	if err != nil {
-		return &pb.ReadResponse{}, err
+		return &metrics.ReadResponse{}, err
 	}
 	defer resp.Body.Close()
 
-	var readResponse pb.ReadResponse
+	var readResponse metrics.ReadResponse
 	if err := json.NewDecoder(resp.Body).Decode(&readResponse); err != nil {
-		return &pb.ReadResponse{}, err
+		return &metrics.ReadResponse{}, err
 	}
 
 	return &readResponse, nil
@@ -78,7 +78,7 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer()
-	pb.RegisterMetricsServiceServer(grpcServer, &server{})
+	metrics.RegisterMetricsServiceServer(grpcServer, &server{})
 
 	log.Println("Starting gRPC server on :50051...")
 	if err := grpcServer.Serve(lis); err != nil {
