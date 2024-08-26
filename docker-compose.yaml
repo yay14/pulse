@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile.api
       ssh: [default]
     ports:
-      - "8080:8080"        # Expose port 8080 for the web service
+      - "9400:9400"        # Expose port 9400 for the web service
     environment:
       - VICTORIA_METRICS_URL=http://victoriametrics:8428 # Set the environment variable for VictoriaMetrics
     networks:

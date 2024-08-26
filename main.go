@@ -7,11 +7,10 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 
-	"net/http"
-
-	metrics "github.com/yay14/pulse/metrics"
+	"github.com/yay14/pulse/metrics"
 	"google.golang.org/grpc"
 )
 
@@ -22,40 +21,63 @@ type server struct {
 // WriteMetrics writes metrics to VictoriaMetrics
 func (s *server) WriteMetrics(ctx context.Context, req *metrics.WriteRequest) (*metrics.WriteResponse, error) {
 	vmURL := os.Getenv("VICTORIA_METRICS_URL")
+	log.Printf("VictoriaMetrics URL: %s", vmURL)
 
-	// Prepare data for VictoriaMetrics
-	var jsonData []map[string]interface{}
+	// Prepare data for VictoriaMetrics in the correct format
+	var jsonData []string
 	for _, ts := range req.Timeseries {
-		for _, sample := range ts.Samples {
-			dataPoint := map[string]interface{}{
-				"__name__":  "http_requests_total",
-				"method":    ts.Labels["method"],
-				"handler":   ts.Labels["handler"],
-				"status":    ts.Labels["status"],
-				"value":     sample.Value,
-				"timestamp": sample.Timestamp,
-			}
-			jsonData = append(jsonData, dataPoint)
+		// Prepare the metric object
+		metric := map[string]interface{}{
+			"__name__": ts.Labels["__name__"], // Ensure the metric name is included
 		}
-	}
 
-	jsonBody, err := json.Marshal(jsonData)
-	if err != nil {
-		return &metrics.WriteResponse{Status: "Error marshalling data"}, err
+		// Add additional labels to the metric object
+		for key, value := range ts.Labels {
+			if key != "__name__" { // Skip the metric name
+				metric[key] = value
+			}
+		}
+
+		// Prepare values and timestamps slices
+		values := make([]float64, len(ts.Samples))
+		timestamps := make([]int64, len(ts.Samples))
+
+		for i, sample := range ts.Samples {
+			values[i] = sample.Value
+			timestamps[i] = sample.Timestamp // Ensure timestamps are in milliseconds
+		}
+
+		// Create the JSON object for the current time series
+		jsonLine := map[string]interface{}{
+			"metric":     metric,
+			"values":     values,
+			"timestamps": timestamps,
+		}
+
+		// Marshal the JSON object to a string
+		jsonDataLine, err := json.Marshal(jsonLine)
+		if err != nil {
+			return &metrics.WriteResponse{Status: "Error marshalling data"}, err
+		}
+
+		// Append the JSON line to the data slice
+		jsonData = append(jsonData, string(jsonDataLine))
 	}
 
 	// Send data to VictoriaMetrics
-	resp, err := http.Post(vmURL+"/api/v1/import", "application/json", bytes.NewReader(jsonBody))
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return &metrics.WriteResponse{Status: "Failed to send data to VictoriaMetrics"}, err
+	for _, line := range jsonData {
+		_, err := http.Post(vmURL+"/api/v1/import", "application/json", bytes.NewReader([]byte(line)))
+		if err != nil {
+			return &metrics.WriteResponse{Status: "Failed to send data to VictoriaMetrics"}, err
+		}
 	}
-
 	return &metrics.WriteResponse{Status: "Data sent to VictoriaMetrics successfully"}, nil
 }
 
 // QueryMetrics queries metrics from VictoriaMetrics
 func (s *server) QueryMetrics(ctx context.Context, req *metrics.ReadRequest) (*metrics.ReadResponse, error) {
 	vmURL := os.Getenv("VICTORIA_METRICS_URL")
+	log.Printf("VictoriaMetrics URL: %s", vmURL)
 
 	resp, err := http.Get(fmt.Sprintf("%s/api/v1/query?query=%s", vmURL, req.Query))
 	if err != nil {
@@ -72,7 +94,7 @@ func (s *server) QueryMetrics(ctx context.Context, req *metrics.ReadRequest) (*m
 }
 
 func main() {
-	lis, err := net.Listen("tcp", ":50051")
+	lis, err := net.Listen("tcp", ":9400")
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
