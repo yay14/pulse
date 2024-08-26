@@ -8,7 +8,9 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 
 	"github.com/yay14/pulse/metrics"
 	"google.golang.org/grpc"
@@ -74,23 +76,84 @@ func (s *server) WriteMetrics(ctx context.Context, req *metrics.WriteRequest) (*
 	return &metrics.WriteResponse{Status: "Data sent to VictoriaMetrics successfully"}, nil
 }
 
-// QueryMetrics queries metrics from VictoriaMetrics
 func (s *server) QueryMetrics(ctx context.Context, req *metrics.ReadRequest) (*metrics.ReadResponse, error) {
 	vmURL := os.Getenv("VICTORIA_METRICS_URL")
-	log.Printf("VictoriaMetrics URL: %s", vmURL)
 
-	resp, err := http.Get(fmt.Sprintf("%s/api/v1/query?query=%s", vmURL, req.Query))
+	// Send the request to VictoriaMetrics
+	encodedQuery := url.QueryEscape(req.Query)
+
+	queryEndpoint := fmt.Sprintf("%s/api/v1/query?query=%s", vmURL, encodedQuery)
+	log.Printf("Querying VictoriaMetrics at %s with query: %s", vmURL, queryEndpoint)
+
+	resp, err := http.Get(queryEndpoint)
 	if err != nil {
+		log.Printf("Error sending request to VictoriaMetrics: %v", err)
 		return &metrics.ReadResponse{}, err
 	}
 	defer resp.Body.Close()
 
-	var readResponse metrics.ReadResponse
-	if err := json.NewDecoder(resp.Body).Decode(&readResponse); err != nil {
+	// Check if the response status is OK
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Unexpected response status: %s", resp.Status)
+		return &metrics.ReadResponse{}, fmt.Errorf("unexpected response status: %s", resp.Status)
+	}
+
+	// Decode the response
+	var vmResponse struct {
+		Status string `json:"status"`
+		Data   struct {
+			ResultType string `json:"resultType"`
+			Result     []struct {
+				Metric map[string]string `json:"metric"`
+				Value  []interface{}     `json:"value"`
+			} `json:"result"`
+		} `json:"data"`
+		Stats struct {
+			SeriesFetched     string `json: "seriesFetched"`
+			ExecutionTimeMsec int64 `json: "executionTimeMsec"`
+		} `json:"stats"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&vmResponse); err != nil {
+		log.Printf("Error decoding response body: %v", err)
 		return &metrics.ReadResponse{}, err
 	}
 
-	return &readResponse, nil
+	log.Printf("Decoded response: %+v", vmResponse)
+
+	readResponse := &metrics.ReadResponse{}
+
+	// Process the results
+	for _, result := range vmResponse.Data.Result {
+		timeseries := &metrics.TimeseriesData{
+			Labels: result.Metric,
+		}
+
+		value := result.Value
+		timestamp := int64(value[0].(float64))
+		metricValue := value[1].(string)
+
+		sample := &metrics.Sample{
+			Value:     mustParseFloat64(metricValue),
+			Timestamp: timestamp,
+		}
+		timeseries.Samples = append(timeseries.Samples, sample)
+
+		readResponse.Timeseries = append(readResponse.Timeseries, timeseries)
+	}
+
+	log.Printf("Final ReadResponse: %+v", readResponse)
+
+	return readResponse, nil
+}
+
+func mustParseFloat64(value string) float64 {
+	v, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		log.Printf("Error parsing float64 value: %s, error: %v", value, err)
+		panic(err)
+	}
+	return v
 }
 
 func main() {
