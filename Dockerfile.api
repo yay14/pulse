@@ -14,7 +14,7 @@ RUN go mod download
 COPY . .
 
 # Build the Go app
-RUN go build -o main .
+RUN go build -o main ./cmd/api/main.go
 
 # Expose port 8080 to the outside world
 EXPOSE 9400
@@ -22,16 +22,3 @@ EXPOSE 9400
 # Command to run the executable
 CMD ["./main"]
 
-# Build stage
-# FROM golang:1.21-alpine AS builder
-# WORKDIR /app
-# COPY . .
-# RUN go mod download
-# RUN CGO_ENABLED=0 GOOS=linux go build -o main .
-
-# # Final stage
-# FROM alpine:latest  
-# RUN apk --no-cache add ca-certificates
-# WORKDIR /root/
-# COPY --from=builder /app/main .
-# CMD ["./main"]

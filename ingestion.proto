@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+option go_package = "github.com/yay14/pulse/ingestion";
+
+service IngestionService {
+    // API for ingesting metrics data from Kafka
+    rpc IngestData(IngestDataRequest) returns (IngestDataResponse);
+    
+    // API for validating metrics data based on predefined rules
+    rpc ValidateMetrics(ValidateDataRequest) returns (ValidateDataResponse);
+
+    // API for adding validations on metrics using name and source_id
+    rpc AddMetricValidation(NewValidationRequest) returns (NewValidationResponse);
+}
+
+message NewValidationRequest{
+    string metric_name = 1;            // Name of the validation rule
+    string source_id = 2;       // Unique identifier for the source emitting the metrics
+    double min_value = 3;            // Minimum value for the metric
+    double max_value = 4;            // Maximum value for the metric
+}
+
+message ValidateDataResponse{
+    bool success = 1;            // Indicates if the validation was added successfully
+    string message = 2;   // Error message if validation failed
+}
+
+message NewValidationResponse{
+    bool success = 1;            // Indicates if the validation was successfully added
+}
+
+message ValidateDataRequest {
+    string source_id = 1;       // Unique identifier for the source emitting the metrics
+    string source_type = 2;     // Type of the source (e.g., app, queue, database)
+    repeated MetricData metrics = 3; // List of metrics to validate
+}
+
+// Request message for IngestData API
+message IngestDataRequest {
+    string source_id = 1;       // Unique identifier for the source emitting the metrics
+    string source_type = 2;     // Type of the source (e.g., app, queue, database)
+    repeated MetricData metrics = 3;  // List of metrics to be ingested
+}
+
+// Response message for IngestData API
+message IngestDataResponse {
+    string status = 1;          // Status message indicating the result of ingestion
+}
+
+
+// Message structure representing individual metrics
+message MetricData {
+    string name = 1;            // Name of the metric
+    map<string, string> labels = 2;  // Labels associated with the metric
+    double value = 3;           // Value of the metric
+    int64 timestamp = 4;        // Timestamp of the metric (epoch in milliseconds)
+}

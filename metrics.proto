@@ -25,8 +25,16 @@ message Sample {
 }
 
 // The ReadRequest is a request to read time series data.
-message ReadRequest {
+message InstantQueryReadRequest {
     string query = 1; // Query string to retrieve data
+}
+
+// The ReadRequest is a request to read time series data.
+message RangeQueryReadRequest {
+    string query = 1; // Query string to retrieve data
+    string start = 2; // Start
+    string end = 3; // End
+    string step =4; // Step
 }
 
 // The ReadResponse is the response for a ReadRequest.
@@ -46,5 +54,8 @@ service MetricsService {
     rpc WriteMetrics(WriteRequest) returns (WriteResponse);
 
     // Query metrics from VictoriaMetrics
-    rpc QueryMetrics(ReadRequest) returns (ReadResponse);
+    rpc InstantQueryMetrics(InstantQueryReadRequest) returns (ReadResponse);
+
+    // Query metrics from VictoriaMetrics
+    rpc RangeQueryMetrics(RangeQueryReadRequest) returns (ReadResponse);
 }

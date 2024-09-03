@@ -1,0 +1,18 @@
+{
+  "timeseries": [
+    {
+      "labels": {
+        "method": "GET",
+        "handler": "/api/v1/data",
+        "status": "200"
+      },
+      "samples": [
+        {
+          "value": 1.0,
+          "timestamp": 1620474602
+        }
+      ]
+    }
+  ]
+}
+

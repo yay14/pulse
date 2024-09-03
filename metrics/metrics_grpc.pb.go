@@ -25,7 +25,9 @@ type MetricsServiceClient interface {
 	// Write metrics to VictoriaMetrics
 	WriteMetrics(ctx context.Context, in *WriteRequest, opts ...grpc.CallOption) (*WriteResponse, error)
 	// Query metrics from VictoriaMetrics
-	QueryMetrics(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadResponse, error)
+	InstantQueryMetrics(ctx context.Context, in *InstantQueryReadRequest, opts ...grpc.CallOption) (*ReadResponse, error)
+	// Query metrics from VictoriaMetrics
+	RangeQueryMetrics(ctx context.Context, in *RangeQueryReadRequest, opts ...grpc.CallOption) (*ReadResponse, error)
 }
 
 type metricsServiceClient struct {
@@ -45,9 +47,18 @@ func (c *metricsServiceClient) WriteMetrics(ctx context.Context, in *WriteReques
 	return out, nil
 }
 
-func (c *metricsServiceClient) QueryMetrics(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadResponse, error) {
+func (c *metricsServiceClient) InstantQueryMetrics(ctx context.Context, in *InstantQueryReadRequest, opts ...grpc.CallOption) (*ReadResponse, error) {
 	out := new(ReadResponse)
-	err := c.cc.Invoke(ctx, "/MetricsService/QueryMetrics", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/MetricsService/InstantQueryMetrics", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *metricsServiceClient) RangeQueryMetrics(ctx context.Context, in *RangeQueryReadRequest, opts ...grpc.CallOption) (*ReadResponse, error) {
+	out := new(ReadResponse)
+	err := c.cc.Invoke(ctx, "/MetricsService/RangeQueryMetrics", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +72,9 @@ type MetricsServiceServer interface {
 	// Write metrics to VictoriaMetrics
 	WriteMetrics(context.Context, *WriteRequest) (*WriteResponse, error)
 	// Query metrics from VictoriaMetrics
-	QueryMetrics(context.Context, *ReadRequest) (*ReadResponse, error)
+	InstantQueryMetrics(context.Context, *InstantQueryReadRequest) (*ReadResponse, error)
+	// Query metrics from VictoriaMetrics
+	RangeQueryMetrics(context.Context, *RangeQueryReadRequest) (*ReadResponse, error)
 	mustEmbedUnimplementedMetricsServiceServer()
 }
 
@@ -72,8 +85,11 @@ type UnimplementedMetricsServiceServer struct {
 func (UnimplementedMetricsServiceServer) WriteMetrics(context.Context, *WriteRequest) (*WriteResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method WriteMetrics not implemented")
 }
-func (UnimplementedMetricsServiceServer) QueryMetrics(context.Context, *ReadRequest) (*ReadResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method QueryMetrics not implemented")
+func (UnimplementedMetricsServiceServer) InstantQueryMetrics(context.Context, *InstantQueryReadRequest) (*ReadResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method InstantQueryMetrics not implemented")
+}
+func (UnimplementedMetricsServiceServer) RangeQueryMetrics(context.Context, *RangeQueryReadRequest) (*ReadResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RangeQueryMetrics not implemented")
 }
 func (UnimplementedMetricsServiceServer) mustEmbedUnimplementedMetricsServiceServer() {}
 
@@ -106,20 +122,38 @@ func _MetricsService_WriteMetrics_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MetricsService_QueryMetrics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ReadRequest)
+func _MetricsService_InstantQueryMetrics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InstantQueryReadRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(MetricsServiceServer).QueryMetrics(ctx, in)
+		return srv.(MetricsServiceServer).InstantQueryMetrics(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/MetricsService/QueryMetrics",
+		FullMethod: "/MetricsService/InstantQueryMetrics",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MetricsServiceServer).QueryMetrics(ctx, req.(*ReadRequest))
+		return srv.(MetricsServiceServer).InstantQueryMetrics(ctx, req.(*InstantQueryReadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MetricsService_RangeQueryMetrics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RangeQueryReadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MetricsServiceServer).RangeQueryMetrics(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/MetricsService/RangeQueryMetrics",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MetricsServiceServer).RangeQueryMetrics(ctx, req.(*RangeQueryReadRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -136,8 +170,12 @@ var MetricsService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _MetricsService_WriteMetrics_Handler,
 		},
 		{
-			MethodName: "QueryMetrics",
-			Handler:    _MetricsService_QueryMetrics_Handler,
+			MethodName: "InstantQueryMetrics",
+			Handler:    _MetricsService_InstantQueryMetrics_Handler,
+		},
+		{
+			MethodName: "RangeQueryMetrics",
+			Handler:    _MetricsService_RangeQueryMetrics_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
