@@ -54,7 +54,7 @@ func NewRepository(cluster *gocql.ClusterConfig) (*Repository, error) {
 	err = session.Query(`
 	CREATE TABLE IF NOT EXISTS metrics_keyspace.metric_validation (
 		id UUID,
-		metric_name TEXT PRIMARY KEY,
+		metric_name TEXT,
 		source_id UUID,
 		min_value DOUBLE,
 		max_value DOUBLE,
