@@ -18,6 +18,20 @@ func Test_mustParseFloat64(t *testing.T) {
 		want float64
 	}{
 		// TODO: Add test cases.
+		{
+			name: "parse int to float64",
+			args: args{
+			    value: "123",
+			},
+			want: 123.0,
+		},
+		{
+			name: "parse decimal to float64",
+			args: args{
+			    value: "100.25",
+			},
+			want: 100.25,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

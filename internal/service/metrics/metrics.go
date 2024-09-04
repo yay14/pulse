@@ -161,7 +161,7 @@ func (s *MetricsService) RangeQueryMetrics(ctx context.Context, req *metrics.Ran
 	var queryEndpoint string
 	if req.Start != "" && req.End != "" && req.Step != "" {
 		// Use the query_range API for range queries
-		queryEndpoint = fmt.Sprintf("%s/api/v1/query_range?query=%s&start=%d&end=%d&step=%d",
+		queryEndpoint = fmt.Sprintf("%s/api/v1/query_range?query=%s&start=%s&end=%s&step=%s",
 			vmURL, encodedQuery, req.Start, req.End, req.Step)
 	} else {
 		// Default to the instant query API
