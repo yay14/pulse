@@ -6,10 +6,20 @@ services:
       context: .
       dockerfile: Dockerfile.api
       ssh: [default]
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - CASSANDRA_HOST=cassandra
+      - VICTORIA_METRICS_URL=http://victoriametrics:8428
+    depends_on:
+      cassandra:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      victoriametrics:
+        condition: service_started
+
     ports:
       - "9400:9400"        # Expose port 9400 for the web service
-    environment:
-      - VICTORIA_METRICS_URL=http://victoriametrics:8428 # Set the environment variable for VictoriaMetrics
     networks:
       - pulse-network
 
@@ -20,5 +30,59 @@ services:
     networks:
       - pulse-network
 
+  cassandra:
+    image: cassandra:latest
+    container_name: cassandra
+    environment:
+      CASSANDRA_CLUSTER_NAME: "cassandra"
+      CASSANDRA_SEEDS: "cassandra"
+      CASSANDRA_LISTEN_ADDRESS: "cassandra"
+      CASSANDRA_RPC_ADDRESS: "0.0.0.0"
+    ports:
+      - "9042:9042"
+    volumes:
+      - cassandra-data:/var/lib/cassandra
+    networks:
+      - pulse-network
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "DESCRIBE KEYSPACES;"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  zookeeper:
+    image: wurstmeister/zookeeper:latest
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    networks:
+      - pulse-network
+    
+
+  kafka:
+    image: wurstmeister/kafka:latest
+    ports:
+      - "9092:9092"
+    expose:
+      - "9093"
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: INSIDE://kafka:9092,OUTSIDE://localhost:9093
+      KAFKA_LISTENERS: INSIDE://0.0.0.0:9092,OUTSIDE://0.0.0.0:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE
+      KAFKA_CREATE_TOPIC: "metrics-topic"  # Creates the topic on startup
+      KAFKA_LOG_DIRS: /kafka-logs
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT  # Add this line
+    volumes:
+      - kafka-data:/kafka-logs
+    networks:
+      - pulse-network
+
+volumes:
+  cassandra-data:
+  kafka-data:
+
 networks:
   pulse-network:
+
+

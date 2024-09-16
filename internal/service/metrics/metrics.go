@@ -1,4 +1,4 @@
-package main
+package metrics
 
 import (
 	"bytes"
@@ -6,22 +6,26 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strconv"
 
 	"github.com/yay14/pulse/metrics"
-	"google.golang.org/grpc"
 )
 
-type server struct {
+type MetricsService struct {
 	metrics.UnimplementedMetricsServiceServer
 }
 
+// NewIngestionService creates a new IngestionService
+func NewMetricsService() *MetricsService {
+	return &MetricsService{}
+}
+
+
 // WriteMetrics writes metrics to VictoriaMetrics
-func (s *server) WriteMetrics(ctx context.Context, req *metrics.WriteRequest) (*metrics.WriteResponse, error) {
+func (s *MetricsService) WriteMetrics(ctx context.Context, req *metrics.WriteRequest) (*metrics.WriteResponse, error) {
 	vmURL := os.Getenv("VICTORIA_METRICS_URL")
 	log.Printf("VictoriaMetrics URL: %s", vmURL)
 
@@ -76,7 +80,7 @@ func (s *server) WriteMetrics(ctx context.Context, req *metrics.WriteRequest) (*
 	return &metrics.WriteResponse{Status: "Data sent to VictoriaMetrics successfully"}, nil
 }
 
-func (s *server) QueryMetrics(ctx context.Context, req *metrics.ReadRequest) (*metrics.ReadResponse, error) {
+func (s *MetricsService) InstantQueryMetrics(ctx context.Context, req *metrics.InstantQueryReadRequest) (*metrics.ReadResponse, error) {
 	vmURL := os.Getenv("VICTORIA_METRICS_URL")
 
 	// Send the request to VictoriaMetrics
@@ -110,7 +114,7 @@ func (s *server) QueryMetrics(ctx context.Context, req *metrics.ReadRequest) (*m
 		} `json:"data"`
 		Stats struct {
 			SeriesFetched     string `json: "seriesFetched"`
-			ExecutionTimeMsec int64 `json: "executionTimeMsec"`
+			ExecutionTimeMsec int64  `json: "executionTimeMsec"`
 		} `json:"stats"`
 	}
 
@@ -147,6 +151,85 @@ func (s *server) QueryMetrics(ctx context.Context, req *metrics.ReadRequest) (*m
 	return readResponse, nil
 }
 
+func (s *MetricsService) RangeQueryMetrics(ctx context.Context, req *metrics.RangeQueryReadRequest) (*metrics.ReadResponse, error) {
+	vmURL := os.Getenv("VICTORIA_METRICS_URL")
+
+	// Encode the query
+	encodedQuery := url.QueryEscape(req.Query)
+
+	// Check if a time range is provided
+	var queryEndpoint string
+	if req.Start != "" && req.End != "" && req.Step != "" {
+		// Use the query_range API for range queries
+		queryEndpoint = fmt.Sprintf("%s/api/v1/query_range?query=%s&start=%s&end=%s&step=%s",
+			vmURL, encodedQuery, req.Start, req.End, req.Step)
+	} else {
+		// Default to the instant query API
+		queryEndpoint = fmt.Sprintf("%s/api/v1/query?query=%s", vmURL, encodedQuery)
+	}
+
+	log.Printf("Querying VictoriaMetrics with query: %s", queryEndpoint)
+
+	resp, err := http.Get(queryEndpoint)
+	if err != nil {
+		log.Printf("Error sending request to VictoriaMetrics: %v", err)
+		return &metrics.ReadResponse{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Unexpected response status: %s", resp.Status)
+		return &metrics.ReadResponse{}, fmt.Errorf("unexpected response status: %s", resp.Status)
+	}
+
+	var vmResponse struct {
+		Status string `json:"status"`
+		Data   struct {
+			ResultType string `json:"resultType"`
+			Result     []struct {
+				Metric map[string]string `json:"metric"`
+				Values [][]interface{}   `json:"values"` // Array of [timestamp, value]
+			} `json:"result"`
+		} `json:"data"`
+		Stats struct {
+			SeriesFetched     string `json:"seriesFetched"`
+			ExecutionTimeMsec int64  `json:"executionTimeMsec"`
+		} `json:"stats"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&vmResponse); err != nil {
+		log.Printf("Error decoding response body: %v", err)
+		return &metrics.ReadResponse{}, err
+	}
+
+	log.Printf("Decoded response: %+v", vmResponse)
+
+	readResponse := &metrics.ReadResponse{}
+
+	for _, result := range vmResponse.Data.Result {
+		timeseries := &metrics.TimeseriesData{
+			Labels: result.Metric,
+		}
+
+		for _, valuePair := range result.Values {
+			timestamp := int64(valuePair[0].(float64))
+			metricValue := valuePair[1].(string)
+
+			sample := &metrics.Sample{
+				Value:     mustParseFloat64(metricValue),
+				Timestamp: timestamp,
+			}
+			timeseries.Samples = append(timeseries.Samples, sample)
+		}
+
+		readResponse.Timeseries = append(readResponse.Timeseries, timeseries)
+	}
+
+	log.Printf("Final ReadResponse: %+v", readResponse)
+
+	return readResponse, nil
+}
+
 func mustParseFloat64(value string) float64 {
 	v, err := strconv.ParseFloat(value, 64)
 	if err != nil {
@@ -154,19 +237,4 @@ func mustParseFloat64(value string) float64 {
 		panic(err)
 	}
 	return v
-}
-
-func main() {
-	lis, err := net.Listen("tcp", ":9400")
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
-
-	grpcServer := grpc.NewServer()
-	metrics.RegisterMetricsServiceServer(grpcServer, &server{})
-
-	log.Println("Starting gRPC server on :50051...")
-	if err := grpcServer.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
-	}
 }
